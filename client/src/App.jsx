@@ -251,7 +251,7 @@ const App = () => {
                         setMessage(`It was tails. You won ${finalAmount} $MEP!`);
                     }
                     setWinCount((prevCount) => prevCount + 1);
-                    dispatch(setUserBalance((userBalance) => userBalance + parseInt(ethers.utils.formatUnits(amount, 9))));
+                    dispatch(setUserBalance(userBalance + finalAmount);
                 } else {
                     if (userChoice == "heads") {
                         setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
