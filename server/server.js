@@ -53,8 +53,8 @@ const resolvePool = async (walletAddress, amount, choice) => {
         const formattedReceipt = JSON.parse(JSON.stringify(receipt, (key, value) =>
             typeof value === 'bigint' ? value.toString() : value
         ));
-        console.log(formattedReceipt);
-        return Buffer.from(formattedReceipt.logs[1].data.slice(-64).replace(/^0+/, ''), 'hex').toString('utf8');
+        
+        return formattedReceipt;
     } catch (error) {
         console.error('Error in resolving pool:', error);
         throw new Error('Error in resolving pool');
