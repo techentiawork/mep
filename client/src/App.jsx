@@ -81,6 +81,7 @@ const App = () => {
     const [showNameModal, setShowNameModal] = useState(false);
     const socketRef = useRef(null);
     const [betHistory, setBetHistory] = useState([]);
+    const [walletAddress, setWalletAddress] = useState(null);
     const videoRef = useRef(null);
     const loopCounterRef = useRef(0);
 
@@ -187,8 +188,8 @@ const App = () => {
                 const provider = new ethers.providers.Web3Provider(walletProvider);
                 const signer = provider.getSigner();
     
-                const walletAddress = await signer.getAddress();
-    
+                const walletAddress_temp = await signer.getAddress();
+                setWalletAddress(walletAddress_temp);
                 const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
                 const mepToken = new ethers.Contract(mepTokenAddress, mepABI, signer);
     
@@ -208,18 +209,18 @@ const App = () => {
     
                 try {
                     const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/distribute`, {
-                        walletAddress,
+                        walletAddress_temp,
                         betAmount: formattedBetAmount,
                         choice
                     });
     
                     if (!res.data.success && deposited) {
-                        await refund(walletAddress, amountInWei);
+                        await refund(walletAddress_temp, amountInWei);
                     }
     
                 } catch (err) {
                     if (deposited) {
-                        await refund(walletAddress, amountInWei);
+                        await refund(walletAddress_temp, amountInWei);
                     }
                 }
     
@@ -244,21 +245,24 @@ const App = () => {
                 const finalAmount = amount / (10 ** 9);
                 console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
                 setResult(betResult);
-                if (betResult === 'won') {
-                    if (userChoice == "heads") {
-                        setMessage(`It was heads. You won ${finalAmount} $MEP!`);
+                setIsFlipping(false);
+                if(walletAddress === user){
+                    if (betResult === 'won') {
+                        dispatch(setUserBalance(userBalance + betAmount*2))
+                        if (userChoice == "heads") {
+                            setMessage(`It was heads. You won ${finalAmount} $MEP!`);
+                        } else {
+                            setMessage(`It was tails. You won ${finalAmount} $MEP!`);
+                        }
+                        setWinCount((prevCount) => prevCount + 1);
                     } else {
-                        setMessage(`It was tails. You won ${finalAmount} $MEP!`);
+                        if (userChoice == "heads") {
+                            setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
+                        } else {
+                            setMessage(`It was tails. You lost ${finalAmount} $MEP!`);
+                        }
+                        setWinCount(0);
                     }
-                    setWinCount((prevCount) => prevCount + 1);
-                    dispatch(setUserBalance(userBalance + finalAmount);
-                } else {
-                    if (userChoice == "heads") {
-                        setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
-                    } else {
-                        setMessage(`It was tails. You lost ${finalAmount} $MEP!`);
-                    }
-                    setWinCount(0);
                 }
     
                 socketRef.current.emit("emitBet", {
