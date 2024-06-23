@@ -246,7 +246,6 @@ const App = () => {
                 console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
                 setResult(betResult);
                 setIsFlipping(false);
-                if(walletAddressCheck === user){
                     if (betResult === 'won') {
                         dispatch(setUserBalance(userBalance + betAmount*2))
                         if (userChoice == "heads") {
@@ -263,7 +262,7 @@ const App = () => {
                         }
                         setWinCount(0);
                     }
-                }
+                
     
                 socketRef.current.emit("emitBet", {
                     player: username,
