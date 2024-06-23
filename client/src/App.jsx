@@ -103,56 +103,56 @@ const App = () => {
         }
     }, [])
 
-    useEffect(() => {
-        const setupEventListener = async () => {
-            if (walletProvider) {
-                const provider = new ethers.providers.Web3Provider(walletProvider);
-                const signer = provider.getSigner();
-                const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
+    // useEffect(() => {
+    //     const setupEventListener = async () => {
+    //         if (walletProvider) {
+    //             const provider = new ethers.providers.Web3Provider(walletProvider);
+    //             const signer = provider.getSigner();
+    //             const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
 
-                poolContract.on('BetResolved', (user, amount, userChoice, betResult) => {
-                    const finalAmount = amount/(10**9);
-                    console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
-                    setResult(betResult);
-                    if (betResult === 'won') {
-                        if(userChoice=="heads"){
-                            setMessage(`It was heads. You won ${finalAmount} $MEP!`);
-                        }else{
-                            setMessage(`It was tails. You won ${finalAmount} $MEP!`);
-                        }
-                        setWinCount((prevCount) => prevCount + 1);
-                        dispatch(setUserBalance((userBalance) => userBalance + parseInt(ethers.utils.formatUnits(amount, 9))));
-                    } else {
-                        if(userChoice=="heads"){
-                            setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
-                        }else{
-                            setMessage(`It was tails. You lost ${finalAmount} $MEP!`);
-                        }
-                        setWinCount(0);
-                    }
+    //             poolContract.on('BetResolved', (user, amount, userChoice, betResult) => {
+    //                 const finalAmount = amount/(10**9);
+    //                 console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
+    //                 setResult(betResult);
+    //                 if (betResult === 'won') {
+    //                     if(userChoice=="heads"){
+    //                         setMessage(`It was heads. You won ${finalAmount} $MEP!`);
+    //                     }else{
+    //                         setMessage(`It was tails. You won ${finalAmount} $MEP!`);
+    //                     }
+    //                     setWinCount((prevCount) => prevCount + 1);
+    //                     dispatch(setUserBalance((userBalance) => userBalance + parseInt(ethers.utils.formatUnits(amount, 9))));
+    //                 } else {
+    //                     if(userChoice=="heads"){
+    //                         setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
+    //                     }else{
+    //                         setMessage(`It was tails. You lost ${finalAmount} $MEP!`);
+    //                     }
+    //                     setWinCount(0);
+    //                 }
 
-                    socketRef.current.emit("emitBet", {
-                        player: username,
-                        amount: ethers.utils.formatUnits(amount, 9),
-                        result: betResult === 'won' ? 'Win' : 'Lost',
-                        time: new Date().getTime(),
-                        winCount: betResult === 'won' ? winCount + 1 : 0,
-                    });
-                });
-            }
-        };
+    //                 socketRef.current.emit("emitBet", {
+    //                     player: username,
+    //                     amount: ethers.utils.formatUnits(amount, 9),
+    //                     result: betResult === 'won' ? 'Win' : 'Lost',
+    //                     time: new Date().getTime(),
+    //                     winCount: betResult === 'won' ? winCount + 1 : 0,
+    //                 });
+    //             });
+    //         }
+    //     };
 
-        setupEventListener();
+    //     setupEventListener();
 
-        return () => {
-            if (walletProvider) {
-                const provider = new ethers.providers.Web3Provider(walletProvider);
-                const signer = provider.getSigner();
-                const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
-                poolContract.removeAllListeners('BetResolved');
-            }
-        };
-    }, [walletProvider, winCount, username, dispatch]);
+    //     return () => {
+    //         if (walletProvider) {
+    //             const provider = new ethers.providers.Web3Provider(walletProvider);
+    //             const signer = provider.getSigner();
+    //             const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
+    //             poolContract.removeAllListeners('BetResolved');
+    //         }
+    //     };
+    // }, [walletProvider, winCount, username, dispatch]);
 
     const updateChoice = (e) => {
         document.querySelector('.bet.active')?.classList.remove('active');
@@ -165,6 +165,8 @@ const App = () => {
         setBetAmount(parseInt(e.target.innerText.split(' ')[0]));
         e.target.classList.add('active');
     };
+
+    const [betPlaced, setBetPlaced] = useState(false);
 
     const placeBet = async () => {
         if (!userBalance) {
@@ -184,46 +186,46 @@ const App = () => {
             try {
                 const provider = new ethers.providers.Web3Provider(walletProvider);
                 const signer = provider.getSigner();
-
+    
                 const walletAddress = await signer.getAddress();
-
+    
                 const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
                 const mepToken = new ethers.Contract(mepTokenAddress, mepABI, signer);
-
+    
                 const amountInWei = ethers.utils.parseEther(betAmount.toString()) / (10 ** 9);
                 const formattedBetAmount = amountInWei.toString();
-
+    
                 const approveTx = await mepToken.approve(poolContractAddress, amountInWei);
                 await approveTx.wait();
-
+    
                 const depositTx = await poolContract.deposit(amountInWei);
                 await depositTx.wait();
-
+    
                 setDeposited(true)
                 setIsFlipping(true);
+                setBetPlaced(true);
                 dispatch(setUserBalance(userBalance - betAmount))
-
+    
                 try {
                     const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/distribute`, {
                         walletAddress,
                         betAmount: formattedBetAmount,
                         choice
                     });
-
+    
                     if (!res.data.success && deposited) {
                         await refund(walletAddress, amountInWei);
                     }
-
+    
                 } catch (err) {
                     if (deposited) {
                         await refund(walletAddress, amountInWei);
                     }
                 }
-
-                setIsFlipping(false);
+    
                 setIsDepositing(false);
                 setDeposited(false);
-
+    
             } catch (error) {
                 setIsDepositing(false);
                 setDeposited(false);
@@ -232,157 +234,226 @@ const App = () => {
             }
         }
     };
-
+    const setupEventListener = async () => {
+        if (walletProvider) {
+            const provider = new ethers.providers.Web3Provider(walletProvider);
+            const signer = provider.getSigner();
+            const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
+    
+            poolContract.on('BetResolved', (user, amount, userChoice, betResult) => {
+                const finalAmount = amount / (10 ** 9);
+                console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
+                setResult(betResult);
+                if (betResult === 'won') {
+                    if (userChoice == "heads") {
+                        setMessage(`It was heads. You won ${finalAmount} $MEP!`);
+                    } else {
+                        setMessage(`It was tails. You won ${finalAmount} $MEP!`);
+                    }
+                    setWinCount((prevCount) => prevCount + 1);
+                    dispatch(setUserBalance((userBalance) => userBalance + parseInt(ethers.utils.formatUnits(amount, 9))));
+                } else {
+                    if (userChoice == "heads") {
+                        setMessage(`It was heads. You lost ${finalAmount} $MEP!`);
+                    } else {
+                        setMessage(`It was tails. You lost ${finalAmount} $MEP!`);
+                    }
+                    setWinCount(0);
+                }
+    
+                socketRef.current.emit("emitBet", {
+                    player: username,
+                    amount: ethers.utils.formatUnits(amount, 9),
+                    result: betResult === 'won' ? 'Win' : 'Lost',
+                    time: new Date().getTime(),
+                    winCount: betResult === 'won' ? winCount + 1 : 0,
+                });
+    
+                // Stop flipping after bet is resolved
+                setIsFlipping(false);
+                setBetPlaced(false);
+            });
+        }
+    };
+    useEffect(() => {
+        if (walletProvider) {
+            handleWalletConnect();
+            setupEventListener(); // Call the event listener setup function here
+        }
+    }, [walletProvider]);
+    
     const refund = async (walletAddress, amountInWei) => {
         try {
             const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/refund`, {
                 walletAddress,
-                betAmount: amountInWei
+                betAmount: amountInWei.toString(),
+                choice
             });
-
-            let betOutcomeMessage = "";
-
-            if (res.data.response) {
-                betOutcomeMessage = res.data.response;
+            if (res.data.success) {
+                console.log('Refunded');
                 dispatch(setUserBalance(userBalance + betAmount));
             } else {
-                betOutcomeMessage = res.data.msg;
+                console.log('Refund failed');
             }
-
-            setMessage(betOutcomeMessage);
-        } catch (err) {
-            dispatch(setAlertMessage({ message: 'Failed to refund', type: 'alert' }));
-            setTimeout(() => dispatch(setAlertMessage({})), 1200);
+        } catch (error) {
+            console.log('Refund error', error);
         }
     };
+    const handleWalletConnect = async () => {
+        const provider = new ethers.providers.Web3Provider(walletProvider);
+        const signer = provider.getSigner();
+        const mepToken = new ethers.Contract(mepTokenAddress, mepABI, signer);
 
+        const balance = await mepToken.balanceOf(await signer.getAddress());
+        dispatch(setUserBalance(parseInt(ethers.utils.formatUnits(balance, 9))));
+    };
+
+    useEffect(() => {
+        if (walletProvider) {
+            handleWalletConnect();
+        }
+    }, [walletProvider]);
     const handleNameSubmit = (e) => {
         e.preventDefault();
         if (username) {
-            sessionStorage.setItem('name', username);
-            setShowNameModal(false);
-            placeBet();
+          sessionStorage.setItem('name', username);
+          setShowNameModal(false)
+          placeBet()
         }
-    };
+      };
 
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!username) {
+            dispatch(setAlertMessage({ message: 'Name is required', type: 'alert' }))
+            setTimeout(() => dispatch(setAlertMessage({})), 1200);
+            return;
+        }
+        sessionStorage.setItem('name', username);
+        setShowNameModal(false);
+    };
     const getTimeDifference = (timestamp) => {
         const currentTime = new Date().getTime();
         const recordTime = new Date(timestamp).getTime();
         const difference = currentTime - recordTime;
-
+    
         const seconds = Math.floor(difference / 1000);
         if (seconds < 60) {
-            return `${seconds} seconds ago`;
+          return `${seconds} seconds ago`;
         }
-
+    
         const minutes = Math.floor(seconds / 60);
         if (minutes < 60) {
-            return `${minutes} minutes ago`;
+          return `${minutes} minutes ago`;
         }
-
+    
         const hours = Math.floor(minutes / 60);
         return `${hours} hours ago`;
-    };
-
-    useEffect(() => {
+      };
+    
+      useEffect(() => {        
         if (isFlipping && videoRef.current) {
-            videoRef.current.playbackRate = 1.0;
-            videoRef.current.play();
-            loopCounterRef.current = 1;
-            videoRef.current.onended = () => {
-                if (loopCounterRef.current < 3) {
-                    loopCounterRef.current += 1;
-                    videoRef.current.play();
-                } else {
-                    setIsFlipping(false);
-                }
+          videoRef.current.playbackRate = 1.0;
+          videoRef.current.play();
+          loopCounterRef.current = 1;
+          videoRef.current.onended = () => {
+            if (loopCounterRef.current < 3) {
+              loopCounterRef.current += 1;
+              videoRef.current.play();
             }
-        } else {
-            setIsFlipping(false);
+            else {
+              setIsFlipping(false);
+            }
+          }
         }
-    }, [isFlipping]);
+        else{
+          setIsFlipping(false);
+        }
+      }, [isFlipping]);
+    
+
 
     return (
         <>
-            <Navbar />
-            {
-                alertMessage?.message &&
-                <Alert message={alertMessage.message} type={alertMessage.type} />
-            }
-            <div className="min-h-screen flex flex-col justify-between gap-10">
-                <div className="w-full min-h-[90vh] flex flex-col items-center justify-around gap-8 bg-[#000000] pt-28 pb-0">
-                    <div className="screen h-screen w-screen fixed left-0 top-0 bg-[#00000057] hidden flex-col items-center justify-center px-2 z-40">
-                    </div>
-
-                    <div className="flex flex-col gap-3 items-center w-full">
-                        <div className="flex flex-col gap-2 items-center w-[80vw] xs:w-[26rem] text-center">
-                            {
-                                isFlipping ? (
-                                    <video ref={videoRef} className='w-32 h-32'>
-                                        <source src="coin1.gif.mp4" type="video/mp4" />
-                                        Your browser does not support the video tag.
-                                    </video>
-                                ) : (
-                                    <div className="h-32 flex justify-center items-center">
-                                        <div className={`coin ${isFlipping ? 'flipping' : ''}`}>
-                                            <div className={`side heads-img ${result === 'heads' ? 'show' : ''}`}></div>
-                                            <div className={`side tails-img ${result === 'tails' ? 'show' : ''}`}></div>
-                                        </div>
-                                    </div>
-                                )
-                            }
-                            <h6 className="text-xl text-white">I LIKE</h6>
-                            <div className="flex gap-4 w-full justify-center">
-                                <button className="btn bet w-full text-2xl" onClick={updateChoice}>Heads</button>
-                                <button className="btn bet w-full text-2xl" onClick={updateChoice}>Tails</button>
-                            </div>
-                            <h6 className="text-xl text-white">FOR</h6>
-                            <div className="flex flex-col xs:flex-row gap-4 w-full justify-center">
-                                <button className="btn bet-amount" onClick={updateBetAmount}>1000 $MEP</button>
-                                <button className="btn bet-amount" onClick={updateBetAmount}>10000 $MEP</button>
-                                <button className="btn bet-amount" onClick={updateBetAmount}>100000 $MEP</button>
-                            </div>
-                            <div className="border-t border-slate-300 pt-4 my-2 w-full flex justify-center">
-                                <button className="btn" onClick={placeBet} disabled={isFlipping}>Double or nothing</button>
-                            </div>
-                            <div className="h-2">
-                                {message && <h6 className="text-xl text-white">{message}</h6>}
-                            </div>
+          <Navbar />
+          {
+            alertMessage?.message &&
+            <Alert message={alertMessage.message} type={alertMessage.type} />
+          }
+          <div className="min-h-screen flex flex-col justify-between gap-10">
+            <div className="w-full min-h-[90vh] flex flex-col items-center justify-around gap-8 bg-[#000000] pt-28 pb-0">
+              <div className="screen h-screen w-screen fixed left-0 top-0 bg-[#00000057] hidden flex-col items-center justify-center px-2 z-40">
+              </div>
+    
+              <div className="flex flex-col gap-3 items-center w-full">
+                <div className="flex flex-col gap-2 items-center w-[80vw] xs:w-[26rem] text-center">
+                  {
+                    isFlipping ? (
+                      <video ref={videoRef} className='w-32 h-32'>
+                        <source src="coin1.gif.mp4" type="video/mp4" />
+                        Your browser does not support the video tag.
+                      </video>
+                    ) : (
+                      <div className="h-32 flex justify-center items-center">
+                        <div className={`coin ${isFlipping ? 'flipping' : ''}`}>
+                          <div className={`side heads-img ${result === 'heads' ? 'show' : ''}`}></div>
+                          <div className={`side tails-img ${result === 'tails' ? 'show' : ''}`}></div>
                         </div>
-                    </div>
-
-                    <div className={`name-screen bg-[#00000067] ${showNameModal ? 'flex' : 'hidden'} justify-center items-center z-[49] w-screen h-screen fixed top-0 left-0`}>
-                        <div className="name-modal relative border border-slate-400/25 w-[95%] sm:w-[30rem] h-40 rounded-lg flex items-center justify-center">
-                            <form onSubmit={handleNameSubmit} className='w-full px-4 flex flex-col xs:flex-row gap-4 items-center justify-center'>
-                                <p onClick={() => setShowNameModal(false)} className="w-full text-right xs:absolute cursor-pointer top-3 right-4 text-[#CAE0A2] text-3xl font-bold">&times;</p>
-                                <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter your name" className="border p-2 bg-transparent text-white rounded-lg px-2 py-1" required />
-                                <button type="submit" className='btn btn1'>Join Room</button>
-                            </form>
-                        </div>
-                    </div>
-
-                    {
-                        betHistory.length > 0 &&
-                        <div className="w-full max-w-2xl text-center text-white mx-auto h-[30rem]">
-                            <h2 className="text-2xl mb-4">Bet History</h2>
-                            <div className="bet-history flex flex-col gap-0 md:items-center whitespace-nowrap overflow-x-auto w-full scroll">
-                                {
-                                    betHistory.map((record, index) => (
-                                        <div className="border-t w-[35rem] sm:w-full border-slate-400 px-4 py-2 flex items-center justify-between" key={index}>
-                                            <p>{record.player} plays bet for {record.amount} $MEP and {record.result === 'Win' ? 'doubled' : 'got rugged'} {record.winCount > 1 && record.result === 'Win' ? `${record.winCount} times` : ''}</p>
-                                            <p>{getTimeDifference(record.time)}</p>
-                                        </div>
-                                    ))
-                                }
-                            </div>
-
-                        </div>
-                    }
+                      </div>
+                    )
+                  }
+                  <h6 className="text-xl text-white">I LIKE</h6>
+                  <div className="flex gap-4 w-full justify-center">
+                    <button className="btn bet w-full text-2xl" onClick={updateChoice}>Heads</button>
+                    <button className="btn bet w-full text-2xl" onClick={updateChoice}>Tails</button>
+                  </div>
+                  <h6 className="text-xl text-white">FOR</h6>
+                  <div className="flex flex-col xs:flex-row gap-4 w-full justify-center">
+                    <button className="btn bet-amount" onClick={updateBetAmount}>1000 $MEP</button>
+                    <button className="btn bet-amount" onClick={updateBetAmount}>10000 $MEP</button>
+                    <button className="btn bet-amount" onClick={updateBetAmount}>100000 $MEP</button>
+                  </div>
+                  <div className="border-t border-slate-300 pt-4 my-2 w-full flex justify-center">
+                    <button className="btn" onClick={placeBet} disabled={isFlipping}>Double or nothing</button>
+                  </div>
+                  <div className="h-2">
+                    {message && <h6 className="text-xl text-white">{message}</h6>}
+                  </div>
                 </div>
-                <Footer />
+              </div>
+    
+              <div className={`name-screen bg-[#00000067] ${showNameModal ? 'flex' : 'hidden'} justify-center items-center z-[49] w-screen h-screen fixed top-0 left-0`}>
+                <div className="name-modal relative border border-slate-400/25 w-[95%] sm:w-[30rem] h-40 rounded-lg flex items-center justify-center">
+                  <form onSubmit={handleNameSubmit} className='w-full px-4 flex flex-col xs:flex-row gap-4 items-center justify-center'>
+                    <p onClick={() => setShowNameModal(false)} className="w-full text-right xs:absolute cursor-pointer top-3 right-4 text-[#CAE0A2] text-3xl font-bold">&times;</p>
+                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter your name" className="border p-2 bg-transparent text-white rounded-lg px-2 py-1" required />
+                    <button type="submit" className='btn btn1'>Join Room</button>
+                  </form>
+                </div>
+              </div>
+    
+              {
+                betHistory.length > 0 &&
+                <div className="w-full max-w-2xl text-center text-white mx-auto h-[30rem]">
+                  <h2 className="text-2xl mb-4">Bet History</h2>
+                  <div className="bet-history flex flex-col gap-0 md:items-center whitespace-nowrap overflow-x-auto w-full scroll">
+                    {
+                      betHistory.map((record, index) => (
+                        <div className="border-t w-[35rem] sm:w-full border-slate-400 px-4 py-2 flex items-center justify-between" key={index}>
+                          <p>{record.player} plays bet for {record.amount} $MEP and {record.result === 'Win' ? 'doubled' : 'got rugged'} {record.winCount > 1 && record.result === 'Win' ? `${record.winCount} times` : ''}</p>
+                          <p>{getTimeDifference(record.time)}</p>
+                        </div>
+                      ))
+                    }
+                  </div>
+    
+                </div>
+              }
             </div>
+            <Footer />
+          </div>
         </>
-    );
+      );
 };
 
 export default App;
