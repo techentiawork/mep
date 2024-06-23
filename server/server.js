@@ -1,43 +1,47 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const Web3 = require('web3');
-const contractAbi = require('./utils/Pool.json');
-const tokenAbi = require('./utils/MEP.json');
-const ethers = require('ethers');
-const { Server } = require('socket.io');
+require('dotenv').config();
+const Express = require('express');
+const socketIo = require('socket.io');
 const http = require('http');
+const cors = require('cors');
+const { Web3 } = require('web3');
+const PoolContractABI = require('./PoolContractABI.json');
+const EventEmitter = require('events');
+EventEmitter.defaultMaxListeners = 20; // or a higher number
 
-const app = express();
+const web3 = new Web3(new Web3.providers.HttpProvider(process.env.INFURA_URL));
+const contractAddress = process.env.CONTRACT_ADDRESS;
+const poolContract = new web3.eth.Contract(PoolContractABI, contractAddress);
+
+const ownerAddress = process.env.OWNER_ADDRESS;
+const ownerPrivateKey = process.env.OWNER_PRIVATE_KEY;
+
+const app = Express();
 const server = http.createServer(app);
-const io = new Server(server, {
+const io = socketIo(server, {
     cors: {
         origin: '*',
+        methods: ['GET', 'POST'],
     },
 });
 
-const poolContractAddress = process.env.POOL_CONTRACT_ADDRESS;
-const mepTokenAddress = process.env.MEP_TOKEN_ADDRESS;
-const ownerPrivateKey = process.env.OWNER_PRIVATE_KEY;
-const ownerAddress = process.env.OWNER_ADDRESS;
-const providerUrl = process.env.PROVIDER_URL;
+app.use(cors())
+    .use(Express.json());
 
-const web3 = new Web3(new Web3.providers.HttpProvider(providerUrl));
-const poolContract = new web3.eth.Contract(contractAbi, poolContractAddress);
-const mepToken = new web3.eth.Contract(tokenAbi, mepTokenAddress);
-
-app.use(cors());
-app.use(bodyParser.json());
+io.on("connection", (socket) => {
+    socket.on("emitBet", (record) => {
+        io.emit("updateHistory", record);
+    });
+});
 
 const resolvePool = async (walletAddress, amount, choice) => {
     try {
         const createRoomData = poolContract.methods.resolvePool(walletAddress, amount, choice).encodeABI();
-        const gasEstimate = await web3.eth.estimateGas({ from: ownerAddress, to: poolContractAddress, data: createRoomData });
+        const gasEstimate = await web3.eth.estimateGas({ from: ownerAddress, to: contractAddress, data: createRoomData });
         const gasPrice = await web3.eth.getGasPrice();
 
         const tx = {
             from: ownerAddress,
-            to: poolContractAddress,
+            to: contractAddress,
             gas: gasEstimate,
             gasPrice: gasPrice,
             data: createRoomData,
@@ -50,6 +54,7 @@ const resolvePool = async (walletAddress, amount, choice) => {
             typeof value === 'bigint' ? value.toString() : value
         ));
 
+        // Emit the BetResolved event to the client
         const result = Buffer.from(formattedReceipt.logs[1].data.slice(-64).replace(/^0+/, ''), 'hex').toString('utf8');
         io.emit('BetResolved', { walletAddress, amount, choice, result });
 
@@ -73,19 +78,16 @@ app.post('/distribute', async (req, res) => {
     }
 });
 
-app.post('/refund', async (req, res) => {
-    try {
-        const { walletAddress, betAmount } = req.body;
-        const mepTokenContract = new web3.eth.Contract(mepABI, mepTokenAddress);
-        const amountInWei = web3.utils.toWei(betAmount.toString(), 'ether') / 10 ** 9;
 
-        const createRoomData = mepTokenContract.methods.transfer(walletAddress, amountInWei).encodeABI();
-        const gasEstimate = await web3.eth.estimateGas({ from: ownerAddress, to: mepTokenAddress, data: createRoomData });
+const refund = async (walletAddress, amount) => {
+    try {
+        const createRoomData = poolContract.methods.refund(walletAddress, amount).encodeABI();
+        const gasEstimate = await web3.eth.estimateGas({ from: ownerAddress, to: contractAddress, data: createRoomData });
         const gasPrice = await web3.eth.getGasPrice();
 
         const tx = {
             from: ownerAddress,
-            to: mepTokenAddress,
+            to: contractAddress,
             gas: gasEstimate,
             gasPrice: gasPrice,
             data: createRoomData,
@@ -94,21 +96,43 @@ app.post('/refund', async (req, res) => {
         const signedTx = await web3.eth.accounts.signTransaction(tx, ownerPrivateKey);
         const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
 
-        res.status(200).json({ success: true, receipt });
+        const formattedReceipt = JSON.parse(JSON.stringify(receipt, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+        ));
+
+        return `${amount} $MEP refunded to ${walletAddress}`;
     } catch (error) {
-        console.error('Error in /refund endpoint:', error);
-        res.status(500).json({ success: false, msg: 'Refund request failed', err: error.message });
+        console.error('Error in refunding pool:', error);
+        throw new Error('Error in refunding pool');
+    }
+};
+
+
+app.post('/refund', async (req, res) => {
+    try {
+        const { walletAddress, betAmount } = req.body;
+        const response = await refund(walletAddress, betAmount);
+        res.status(200).json({ success: true, response });
+    } catch (err) {
+        console.error('Error in /refund endpoint:', err);
+        res.status(500).json({ success: false, msg: 'Refund request failed', err: err.message });
     }
 });
 
-io.on('connection', (socket) => {
-    console.log('a user connected');
-    socket.on('disconnect', () => {
-        console.log('user disconnected');
-    });
+const PORT = process.env.PORT;
+
+server.listen(PORT, () => {
+    console.log(`Server is running at http://localhost:${PORT}`);
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// Set up event listener for BetResolved
+poolContract.events.BetResolved({
+    fromBlock: 'latest'
+}, (error, event) => {
+    if (error) {
+        console.error('Error on event', error);
+    } else {
+        const result = event.returnValues.result;
+        console.log('BetResolved event result:', result);
+    }
 });
