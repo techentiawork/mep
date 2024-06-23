@@ -81,7 +81,7 @@ const App = () => {
     const [showNameModal, setShowNameModal] = useState(false);
     const socketRef = useRef(null);
     const [betHistory, setBetHistory] = useState([]);
-    const [walletAddress, setWalletAddress] = useState(null);
+    const [walletAddressCheck, setWalletAddressCheck] = useState(null);
     const videoRef = useRef(null);
     const loopCounterRef = useRef(0);
 
@@ -188,8 +188,8 @@ const App = () => {
                 const provider = new ethers.providers.Web3Provider(walletProvider);
                 const signer = provider.getSigner();
     
-                const walletAddress_temp = await signer.getAddress();
-                setWalletAddress(walletAddress_temp);
+                const walletAddress = await signer.getAddress();
+                setWalletAddressCheck(walletAddress);
                 const poolContract = new ethers.Contract(poolContractAddress, poolAbi, signer);
                 const mepToken = new ethers.Contract(mepTokenAddress, mepABI, signer);
     
@@ -209,18 +209,18 @@ const App = () => {
     
                 try {
                     const res = await axios.post(`${import.meta.env.VITE_SERVER_URL}/distribute`, {
-                        walletAddress_temp,
+                        walletAddress,
                         betAmount: formattedBetAmount,
                         choice
                     });
     
                     if (!res.data.success && deposited) {
-                        await refund(walletAddress_temp, amountInWei);
+                        await refund(walletAddress, amountInWei);
                     }
     
                 } catch (err) {
                     if (deposited) {
-                        await refund(walletAddress_temp, amountInWei);
+                        await refund(walletAddress, amountInWei);
                     }
                 }
     
@@ -246,7 +246,7 @@ const App = () => {
                 console.log(`BetResolved: User: ${user}, Amount: finalAmount, Choice: ${userChoice}, Result: ${betResult}`);
                 setResult(betResult);
                 setIsFlipping(false);
-                if(walletAddress === user){
+                if(walletAddressCheck === user){
                     if (betResult === 'won') {
                         dispatch(setUserBalance(userBalance + betAmount*2))
                         if (userChoice == "heads") {
